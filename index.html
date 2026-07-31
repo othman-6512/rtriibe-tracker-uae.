@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rTriibe Ops — Command Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#0E1F3D; --navy2:#16305C; --bg:#F4F6FA; --surface:#FFFFFF;
+    --ink:#0E1F3D; --inksoft:#5C6B85; --inkfaint:#9AA6BC;
+    --accent:#2E6CF6; --accentsoft:#E8EFFE;
+    --success:#0EA972; --successsoft:#E1F7EE;
+    --warn:#D97A1F; --warnsoft:#FBF0DF;
+    --danger:#E0483F; --dangersoft:#FBE7E5;
+    --closed:#97A3B8; --closedsoft:#EEF1F6;
+    --line:#E3E8F0; --line2:#EEF1F6;
+    --purple:#7A5AF8; --teal:#12A9B4; --pink:#E0568B;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;font-size:13px;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  /* top bar */
+  .topbar{background:var(--navy);background-image:linear-gradient(90deg,var(--navy),var(--navy2));color:#fff;padding:0 20px;display:flex;align-items:center;gap:24px;height:52px;position:sticky;top:0;z-index:30;}
+  .brand{display:flex;align-items:center;gap:9px;}
+  .brand .mark{width:28px;height:28px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
+  .brand b{font-size:14px;font-weight:700;letter-spacing:-0.01em;}
+  .brand span{font-size:10px;color:rgba(255,255,255,0.45);font-family:'IBM Plex Mono',monospace;display:block;margin-top:1px;}
+  nav{display:flex;gap:2px;height:100%;}
+  nav button{background:none;border:none;color:rgba(255,255,255,0.6);padding:0 15px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;border-bottom:2px solid transparent;height:100%;transition:all .15s;}
+  nav button:hover{color:#fff;}
+  nav button.active{color:#fff;border-bottom-color:var(--accent);}
+  .topbar .right{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(255,255,255,0.5);}
+
+  main{padding:18px 20px 60px;max-width:1600px;}
+  section{display:none;}
+  section.active{display:block;animation:fade .2s ease;}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+
+  h2{font-size:18px;font-weight:800;margin:0 0 2px;letter-spacing:-0.01em;}
+  .sub{color:var(--inksoft);font-size:12.5px;margin:0 0 16px;}
+
+  /* KPI strip */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px;}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 14px;}
+  .kpi .n{font-size:26px;font-weight:800;line-height:1;letter-spacing:-0.02em;}
+  .kpi .l{font-size:10.5px;color:var(--inksoft);margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em;}
+  .kpi.warn .n{color:var(--warn);} .kpi.success .n{color:var(--success);} .kpi.accent .n{color:var(--accent);} .kpi.purple .n{color:var(--purple);}
+
+  /* charts grid */
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+  .chart-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .chart-card h3{font-size:13px;font-weight:700;margin:0 0 14px;display:flex;align-items:center;justify-content:space-between;}
+  .chart-card h3 .tag{font-size:10px;color:var(--inkfaint);font-family:'IBM Plex Mono',monospace;font-weight:500;}
+  .chart-wrap{width:100%;overflow:hidden;}
+  svg{display:block;width:100%;height:auto;}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;}
+  .legend .li{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--inksoft);}
+  .legend .sw{width:9px;height:9px;border-radius:2px;}
+
+  /* attention row */
+  .attn{background:var(--navy);background-image:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:12px;padding:15px 18px;margin-bottom:16px;color:#fff;}
+  .attn h3{font-size:13px;font-weight:700;margin:0 0 11px;display:flex;align-items:center;gap:7px;}
+  .attn .pulse{width:7px;height:7px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 4px rgba(224,72,63,0.25);}
+  .attn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;}
+  .attn-item{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:9px 11px;}
+  .attn-item .t{font-size:9.5px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:3px;}
+  .attn-item .n{font-size:12.5px;font-weight:600;}
+  .attn-item .s{font-size:11px;color:rgba(255,255,255,0.6);margin-top:1px;}
+  .attn-empty{color:rgba(255,255,255,0.55);font-size:12.5px;}
+
+  /* toolbar */
+  .toolbar{display:flex;gap:9px;align-items:center;margin-bottom:11px;flex-wrap:wrap;}
+  .toolbar input[type=text],.toolbar select{border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:12.5px;font-family:'Inter',sans-serif;background:var(--surface);color:var(--ink);}
+  .toolbar input[type=text]{width:240px;}
+  .toolbar input:focus,.toolbar select:focus{outline:2px solid var(--accentsoft);border-color:var(--accent);}
+  .toolbar .count{color:var(--inksoft);font-size:12px;font-family:'IBM Plex Mono',monospace;}
+  .spacer{flex:1;}
+  .btn{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;}
+  .btn:hover{opacity:.9;} .btn.ghost{background:none;color:var(--inksoft);border:1px solid var(--line);} .btn.ghost:hover{color:var(--ink);}
+  .btn.sm{padding:4px 9px;font-size:11.5px;}
+
+  /* table */
+  .tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:auto;max-width:100%;}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;white-space:nowrap;}
+  thead th{position:sticky;top:0;background:#F8FAFC;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:var(--inkfaint);font-weight:700;padding:9px 12px;border-bottom:1px solid var(--line);font-family:'IBM Plex Mono',monospace;z-index:2;}
+  tbody td{padding:8px 12px;border-bottom:1px solid var(--line2);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover td{background:#FAFBFD;}
+  td.strong{font-weight:700;}
+  td .muted{color:var(--inksoft);font-size:11px;}
+  .wrapcell{white-space:normal;min-width:200px;max-width:320px;font-size:11.5px;color:var(--inksoft);line-height:1.4;}
+
+  /* inline status select */
+  select.status{border:1px solid var(--line);border-radius:20px;padding:3px 22px 3px 10px;font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:0.02em;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%235C6B85' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 7px center;}
+  select.status:focus{outline:2px solid var(--accentsoft);}
+  .s-open,.s-sourcing,.s-submitted{background:var(--warnsoft);color:var(--warn);border-color:transparent;}
+  .s-filled,.s-placed,.s-signed,.s-approved{background:var(--successsoft);color:var(--success);border-color:transparent;}
+  .s-interview,.s-offer,.s-onhold,.s-pending,.s-inreview{background:var(--accentsoft);color:var(--accent);border-color:transparent;}
+  .s-closed,.s-rejected,.s-notstarted,.s-notsuitable{background:var(--closedsoft);color:var(--closed);border-color:transparent;}
+
+  /* new stage colors */
+  .s-interviewscheduled{background:var(--accentsoft);color:var(--accent);border-color:transparent;}
+  .s-interviewed{background:#EFEAFE;color:var(--purple);border-color:transparent;}
+  .s-withdrawn{background:var(--closedsoft);color:var(--closed);border-color:transparent;}
+  /* star */
+  .star{cursor:pointer;font-size:15px;color:var(--inkfaint);user-select:none;}
+  .star.on{color:#F5A623;}
+  /* mini inline select (rating/outcome) */
+  select.mini{border:1px solid var(--line);border-radius:6px;padding:3px 20px 3px 8px;font-size:11px;font-family:'Inter',sans-serif;background:var(--surface);color:var(--ink);cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%235C6B85' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 6px center;}
+  select.mini:focus{outline:2px solid var(--accentsoft);border-color:var(--accent);}
+  /* follow-up counter */
+  .fu{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:12px;display:inline-block;min-width:14px;text-align:center;}
+  .fu.hot{color:var(--danger);}
+  .fu-btn{border:1px solid var(--line);background:var(--bg);border-radius:5px;font-size:10px;font-weight:700;padding:1px 6px;cursor:pointer;color:var(--inksoft);font-family:'IBM Plex Mono',monospace;}
+  .fu-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .na-over{color:var(--danger);font-weight:600;}
+  .attn-item.clickable{cursor:pointer;transition:background .15s,transform .1s;}
+  .attn-item.clickable:hover{background:rgba(255,255,255,0.14);transform:translateY(-1px);}
+  .attn-item.clickable:active{transform:translateY(0);}
+  @keyframes flashrow{0%{background:#FFF3C4;}60%{background:#FFF9E3;}100%{background:transparent;}}
+  tbody tr.flash td{animation:flashrow 2.2s ease-out;}
+  .pips{display:flex;gap:3px;}
+  .pip{font-size:9px;font-weight:700;padding:2px 6px;border-radius:12px;font-family:'IBM Plex Mono',monospace;}
+  .pip.on{background:var(--successsoft);color:var(--success);} .pip.off{background:var(--closedsoft);color:var(--closed);}
+
+  .days{font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .days.hot{color:var(--danger);font-weight:700;}
+  .icon-btn{background:none;border:1px solid var(--line);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:11px;color:var(--inksoft);}
+  .icon-btn:hover{border-color:var(--inkfaint);color:var(--ink);}
+
+  .empty{padding:40px;text-align:center;color:var(--inksoft);}
+
+  /* modal */
+  .overlay{display:none;position:fixed;inset:0;background:rgba(14,31,61,0.4);align-items:flex-start;justify-content:center;padding:36px 20px;z-index:50;overflow-y:auto;}
+  .overlay.active{display:flex;}
+  .modal{background:var(--surface);border-radius:14px;width:100%;max-width:620px;box-shadow:0 24px 60px rgba(14,31,61,0.28);}
+  .modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line);}
+  .modal-h h3{font-size:15.5px;font-weight:700;margin:0;}
+  .modal-x{background:none;border:none;font-size:20px;color:var(--inkfaint);cursor:pointer;}
+  .modal-b{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .fld{display:flex;flex-direction:column;gap:4px;} .fld.full{grid-column:1/-1;} .fld.chk{flex-direction:row;align-items:center;gap:7px;}
+  .fld label{font-size:10.5px;font-weight:700;color:var(--inksoft);text-transform:uppercase;letter-spacing:0.03em;}
+  .fld.chk label{text-transform:none;font-size:12.5px;color:var(--ink);}
+  .fld input,.fld select,.fld textarea{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;font-family:'Inter',sans-serif;background:var(--bg);}
+  .fld textarea{min-height:52px;resize:vertical;}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{outline:2px solid var(--accentsoft);border-color:var(--accent);}
+  .modal-f{display:flex;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--line);}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(18px);background:var(--navy);color:#fff;padding:9px 16px;border-radius:8px;font-size:12.5px;opacity:0;transition:all .25s;pointer-events:none;z-index:100;font-weight:600;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:900px){ .kpis{grid-template-columns:repeat(3,1fr);} .charts{grid-template-columns:1fr;} .modal-b{grid-template-columns:1fr;} nav button{padding:0 10px;font-size:12px;} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><div class="mark">r</div><div><b>rTriibe Ops</b><span>COMMAND BOARD</span></div></div>
+  <nav id="nav">
+    <button data-v="dashboard" class="active">Dashboard</button>
+    <button data-v="pipeline">Pipeline</button>
+    <button data-v="vacancies">Vacancies</button>
+    <button data-v="candidates">Candidates</button>
+    <button data-v="schools">Schools</button>
+    <button data-v="log">Daily Log</button>
+  </nav>
+  <div class="right" id="clock"></div>
+</div>
+
+<main>
+  <!-- DASHBOARD -->
+  <section id="v-dashboard" class="active">
+    <h2>Command Dashboard</h2>
+    <p class="sub">Everything at a glance — live counts, what needs you, and the shape of the desk.</p>
+    <div class="kpis" id="kpis"></div>
+    <div class="attn"><h3><span class="pulse"></span>Needs attention <span id="attnCount" style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);margin-left:4px;"></span></h3><div id="attn"></div></div>
+    <div class="charts">
+      <div class="chart-card"><h3>Pipeline by stage <span class="tag">deals</span></h3><div class="chart-wrap" id="chartStage"></div></div>
+      <div class="chart-card"><h3>Vacancies by status <span class="tag">roles</span></h3><div class="chart-wrap" id="chartVac"></div></div>
+      <div class="chart-card"><h3>Deals per school <span class="tag">top 8</span></h3><div class="chart-wrap" id="chartSchool"></div></div>
+      <div class="chart-card"><h3>Activity over time <span class="tag">deals created / wk</span></h3><div class="chart-wrap" id="chartTime"></div></div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section id="v-pipeline">
+    <h2>Pipeline</h2><p class="sub">Every deal. Change stage right in the row.</p>
+    <div class="toolbar">
+      <input type="text" id="q-pipeline" placeholder="Search school, candidate, role…">
+      <select id="f-pipeline"><option value="">All stages</option><option>Sourcing</option><option>Submitted</option><option>Interview</option><option>Offer</option><option>Placed</option><option>Rejected</option></select>
+      <span class="count" id="c-pipeline"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" onclick="exportCSV('pipeline')">Export CSV</button>
+      <button class="btn" onclick="openModal('pipeline')">+ New deal</button>
+    </div>
+    <div class="tablewrap"><div id="t-pipeline"></div></div>
+  </section>
+
+  <!-- VACANCIES -->
+  <section id="v-vacancies">
+    <h2>Vacancies</h2><p class="sub">Every role. Change status right in the row. Aging shows days open.</p>
+    <div class="toolbar">
+      <input type="text" id="q-vacancies" placeholder="Search school, role, contact…">
+      <select id="f-vacancies"><option value="">All statuses</option><option>Open</option><option>Filled</option><option>On Hold</option><option>Closed</option></select>
+      <span class="count" id="c-vacancies"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" onclick="exportCSV('vacancies')">Export CSV</button>
+      <button class="btn" onclick="openModal('vacancies')">+ New vacancy</button>
+    </div>
+    <div class="tablewrap"><div id="t-vacancies"></div></div>
+  </section>
+
+  <!-- CANDIDATES -->
+  <section id="v-candidates">
+    <h2>Candidates</h2><p class="sub">Working pool. Compliance pips + inline status.</p>
+    <div class="toolbar">
+      <input type="text" id="q-candidates" placeholder="Search name, role, visa, notes…">
+      <select id="f-candidates"><option value="">All statuses</option><option>Approved</option><option>Placed</option><option>In Review</option><option>Not Suitable</option></select>
+      <span class="count" id="c-candidates"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" onclick="exportCSV('candidates')">Export CSV</button>
+      <button class="btn" onclick="openModal('candidates')">+ New candidate</button>
+    </div>
+    <div class="tablewrap"><div id="t-candidates"></div></div>
+  </section>
+
+  <!-- SCHOOLS -->
+  <section id="v-schools">
+    <h2>Schools</h2><p class="sub">Clients, contacts, agreement status.</p>
+    <div class="toolbar">
+      <input type="text" id="q-schools" placeholder="Search school, contact, notes…">
+      <span class="count" id="c-schools"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" onclick="exportCSV('schools')">Export CSV</button>
+      <button class="btn" onclick="openModal('schools')">+ New school</button>
+    </div>
+    <div class="tablewrap"><div id="t-schools"></div></div>
+  </section>
+
+  <!-- LOG -->
+  <section id="v-log">
+    <h2>Daily Log</h2><p class="sub">End-of-day notes.</p>
+    <div class="chart-card" style="margin-bottom:14px;">
+      <div style="display:grid;gap:10px;">
+        <div class="fld"><label>Date</label><input type="date" id="log-date" style="max-width:200px;"></div>
+        <div class="fld"><label>Done today</label><textarea id="log-done" placeholder="Wins, submissions, interviews confirmed…"></textarea></div>
+        <div class="fld"><label>Pending / next</label><textarea id="log-pending" placeholder="Waiting on…"></textarea></div>
+        <div><button class="btn" onclick="saveLog()">Save entry</button></div>
+      </div>
+    </div>
+    <div class="tablewrap"><div id="t-log"></div></div>
+  </section>
+</main>
+
+<!-- modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-h"><h3 id="m-title">Add</h3><button class="modal-x" onclick="closeModal()">&times;</button></div>
+    <div class="modal-b" id="m-body"></div>
+    <div class="modal-f">
+      <button class="btn ghost sm" id="m-del" style="display:none;color:var(--danger);border-color:var(--dangersoft);">Delete</button>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" onclick="closeModal()">Cancel</button>
+      <button class="btn sm" id="m-save">Save</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let DATA = { pipeline:[], vacancies:[], candidates:[], schools:[], log:[] };
+const STORE_KEY = 'rtriibe-ops-cmdboard-v2';
+const SEED_DATA = {"pipeline":[{"school":"Kings' Al Barsha","group":"Kings' Education","role":"A-Level Physics","candidate":"Nabil Anis","type":"Permanent","stage":"Submitted","startDate":"2026-08-23","createdAt":1784192400000,"activity":[{"date":"2026-07-16","text":"Submitted to Mishal"},{"date":"2026-07-22","text":"Confirmed available to start 23 Aug"}],"id":"seed200","updatedAt":1784192400000,"interviewDate":"","outcome":"","interviewRating":"","nextAction":"Chase Mishal for interview decision","nextActionDate":"2026-07-24","followUps":0,"priority":false},{"school":"Kings' Al Barsha","group":"Kings' Education","role":"A-Level Physics","candidate":"Noman Shafiq","type":"Permanent","stage":"Submitted","startDate":"2026-08-23","createdAt":1784192400000,"activity":[{"date":"2026-07-16","text":"Submitted to Mishal (British, QTS)"},{"date":"2026-07-22","text":"Confirmed available 23 Aug"}],"id":"seed201","updatedAt":1784192400000,"interviewDate":"","outcome":"","interviewRating":"","nextAction":"Chase Mishal for interview decision","nextActionDate":"2026-07-24","followUps":0,"priority":false},{"school":"Kings' Al Barsha","group":"Kings' Education","role":"A-Level Physics","candidate":"Mohamed Elbayyar","type":"Permanent","stage":"Submitted","startDate":"2026-08-23","createdAt":1784192400000,"activity":[{"date":"2026-07-16","text":"Submitted to Mishal"},{"date":"2026-07-22","text":"Confirmed available 23 Aug"}],"id":"seed202","updatedAt":1784192400000,"interviewDate":"","outcome":"","interviewRating":"","nextAction":"Chase Mishal for interview decision","nextActionDate":"2026-07-24","followUps":0,"priority":false},{"school":"Kings' Al Barsha","group":"Kings' Education","role":"A-Level Physics","candidate":"Vineeth Kumar","type":"Permanent","stage":"Interviewed","createdAt":1784019600000,"activity":[{"date":"2026-07-14","text":"First Physics profile submitted"},{"date":"2026-07-15","text":"Interviewed by Mishal"}],"id":"seed203","updatedAt":1784019600000,"interviewDate":"","startDate":"","outcome":"","interviewRating":"","nextAction":"Chase Kings' for interview feedback","nextActionDate":"2026-07-23","followUps":1,"priority":false},{"school":"DBS Springs","group":"Taaleem","role":"English \u2014 Term 1","candidate":"Nuha","type":"Supply","stage":"Interview Scheduled","interviewDate":"2026-07-22","createdAt":1784538000000,"activity":[{"date":"2026-07-21","text":"Preferred candidate"},{"date":"2026-07-22","text":"Interview 10:00am, Teams link sent"}],"id":"seed204","updatedAt":1784538000000,"startDate":"","outcome":"","interviewRating":"","nextAction":"Interview today \u2014 get feedback after","nextActionDate":"2026-07-22","followUps":0,"priority":true},{"school":"DBS Springs","group":"Taaleem","role":"English \u2014 Term 1","candidate":"Tahir","type":"Supply","stage":"Interview Scheduled","interviewDate":"2026-07-22","createdAt":1784538000000,"activity":[{"date":"2026-07-21","text":"Preferred candidate"},{"date":"2026-07-22","text":"Interview 11:00am, Teams link sent"}],"id":"seed205","updatedAt":1784538000000,"startDate":"","outcome":"","interviewRating":"","nextAction":"Interview today \u2014 get feedback after","nextActionDate":"2026-07-22","followUps":0,"priority":true},{"school":"DBS Springs","group":"Taaleem","role":"English \u2014 Term 1","candidate":"Frederick","type":"Supply","stage":"Submitted","createdAt":1784538000000,"activity":[{"date":"2026-07-21","text":"School open to interviewing too"}],"id":"seed206","updatedAt":1784538000000,"interviewDate":"","startDate":"","outcome":"","interviewRating":"","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"DBS Springs","group":"Taaleem","role":"English/Media \u2014 Term 1","candidate":"Krizzane Salinas","type":"Supply","stage":"Interview Scheduled","interviewDate":"2026-07-24","createdAt":1784710800000,"activity":[{"date":"2026-07-22","text":"Submitted (English + MIL/media). rTRKS01 built."},{"date":"2026-07-22","text":"Interview confirmed Thu 24 Jul 11:00am"}],"id":"seed207","updatedAt":1784710800000,"startDate":"","outcome":"","interviewRating":"","nextAction":"Interview Thu 24th \u2014 links sent","nextActionDate":"2026-07-24","followUps":0,"priority":true},{"school":"DBS Springs","group":"Taaleem","role":"STEAM \u2014 Term 1","candidate":"Tanzeela Shaikh","type":"Supply","stage":"Interview Scheduled","interviewDate":"2026-07-24","createdAt":1784710800000,"activity":[{"date":"2026-07-22","text":"Submitted (Design & Tech/STEAM). rTRTS01 built."},{"date":"2026-07-22","text":"Interview confirmed Thu 24 Jul 12:00pm"}],"id":"seed208","updatedAt":1784710800000,"startDate":"","outcome":"","interviewRating":"","nextAction":"Interview Thu 24th \u2014 links sent","nextActionDate":"2026-07-24","followUps":0,"priority":true},{"school":"DBS Jumeirah Park","group":"Taaleem","role":"EYFS","candidate":"Dinali Athukorala","type":"Permanent","stage":"Submitted","createdAt":1784624400000,"activity":[{"date":"2026-07-21","text":"Submitted. rTRDA01 built. School forwarding for interview decision."}],"id":"seed209","updatedAt":1784624400000,"interviewDate":"","startDate":"","outcome":"","interviewRating":"","nextAction":"Chase Lucy for interview decision","nextActionDate":"2026-07-24","followUps":0,"priority":false},{"school":"DBS Jumeirah Park","group":"Taaleem","role":"EYFS","candidate":"Suzanne Vaidya","type":"Permanent","stage":"Rejected","createdAt":1784624400000,"activity":[{"date":"2026-07-21","text":"Already applied directly / known to school \u2014 not progressed via us"}],"id":"seed210","updatedAt":1784624400000,"interviewDate":"","startDate":"","outcome":"Other","interviewRating":"","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"DBS Jumeirah Park","group":"Taaleem","role":"EYFS","candidate":"Harvinder Kaur","type":"Permanent","stage":"Rejected","createdAt":1784624400000,"activity":[{"date":"2026-07-21","text":"Already applied directly / known to school \u2014 not progressed via us"}],"id":"seed211","updatedAt":1784624400000,"interviewDate":"","startDate":"","outcome":"Other","interviewRating":"","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"DBS Springs","group":"Taaleem","role":"Maths \u2014 Term 1","candidate":"Wajeeha","type":"Supply","stage":"Rejected","createdAt":1782982800000,"activity":[{"date":"2026-07-02","text":"Interviewed"},{"date":"2026-07-02","text":"Rejected \u2014 no A-Level experience"}],"id":"seed212","updatedAt":1782982800000,"interviewDate":"","startDate":"","outcome":"Qualification gap","interviewRating":"OK","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"GIS","group":"Taaleem","role":"Secondary Maths","candidate":"Vahida Beevi","type":"Permanent","stage":"Submitted","createdAt":1784106000000,"activity":[{"date":"2026-07-15","text":"Submitted (Indian national, B.Ed, KHDA/ADEK/MOE approved)"},{"date":"2026-07-17","text":"Chased Nicola for interview decision"}],"id":"seed213","updatedAt":1784106000000,"interviewDate":"","startDate":"","outcome":"","interviewRating":"","nextAction":"Chase Nicola for interview decision","nextActionDate":"2026-07-23","followUps":2,"priority":false},{"school":"Ajyal MBZ","group":"","role":"FS2 Class Teacher","candidate":"Tahseen Muhammad","type":"Permanent","stage":"Offer","createdAt":1784019600000,"activity":[{"date":"2026-07-14","text":"Interviewed"},{"date":"2026-07-16","text":"Offer to proceed as FS2 Class Teacher"},{"date":"2026-07-17","text":"Package details requested; forwarded to HR/Principal"}],"id":"seed214","updatedAt":1784019600000,"interviewDate":"","startDate":"","outcome":"","interviewRating":"Strong","nextAction":"Get package details from Ajyal to brief candidate","nextActionDate":"2026-07-23","followUps":0,"priority":true},{"school":"Ajyal MBZ","group":"","role":"FS2 Class Teacher","candidate":"Bettinah","type":"Permanent","stage":"Rejected","createdAt":1784019600000,"activity":[{"date":"2026-07-16","text":"Rejected \u2014 school wanted more recent British school experience"}],"id":"seed215","updatedAt":1784019600000,"interviewDate":"","startDate":"","outcome":"Qualification gap","interviewRating":"OK","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"Ajyal MBZ","group":"","role":"EYFS Class Teacher","candidate":"Sandra Kadoura","type":"Permanent","stage":"Offer","createdAt":1782291600000,"activity":[{"date":"2026-07-03","text":"Interviewed"},{"date":"2026-07-03","text":"School proceeding to offer; liaise with Raj (HR)"}],"id":"seed216","updatedAt":1782291600000,"interviewDate":"","startDate":"","outcome":"","interviewRating":"Strong","nextAction":"Liaise with Raj (HR) on offer next steps","nextActionDate":"2026-07-23","followUps":0,"priority":true},{"school":"Ajyal MBZ","group":"","role":"EYFS Class Teacher","candidate":"Bevemie Diamos","type":"Permanent","stage":"Rejected","createdAt":1782291600000,"activity":[{"date":"2026-07-01","text":"Rejected \u2014 wanted more extensive EYFS-specific experience"}],"id":"seed217","updatedAt":1782291600000,"interviewDate":"","startDate":"","outcome":"Qualification gap","interviewRating":"","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"EIS Jumeirah","group":"Taaleem","role":"Business & Economics","candidate":"Piotr","type":"Permanent","stage":"Rejected","createdAt":1782464400000,"activity":[{"date":"2026-07-01","text":"Interviewed 3pm"},{"date":"2026-07-06","text":"Not shortlisted \u2014 SLT on break, no feedback"}],"id":"seed218","updatedAt":1782464400000,"interviewDate":"","startDate":"","outcome":"No feedback from school","interviewRating":"","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"VISS-KHF","group":"","role":"Grade 5 Primary Homeroom","candidate":"Bernadette Rose Sneddon","type":"Permanent","stage":"Rejected","createdAt":1784278800000,"activity":[{"date":"2026-07-17","text":"Rejected \u2014 career instability since 2018 + prior group history"}],"id":"seed219","updatedAt":1784278800000,"interviewDate":"","startDate":"","outcome":"Chose another candidate","interviewRating":"","nextAction":"","nextActionDate":"","followUps":0,"priority":false},{"school":"VISS-KHF","group":"","role":"Grade 5 Primary Homeroom","candidate":"Sashoy Austin","type":"Permanent","stage":"Rejected","createdAt":1784278800000,"activity":[{"date":"2026-07-17","text":"Rejected \u2014 interviewed poorly, spoke hypothetically"}],"id":"seed220","updatedAt":1784278800000,"interviewDate":"","startDate":"","outcome":"Chose another candidate","interviewRating":"Weak","nextAction":"","nextActionDate":"","followUps":0,"priority":false}],"vacancies":[{"school":"Kings' Al Barsha","group":"Kings' Education","role":"A-Level Physics","contact":"Mishal Nur Rahim","level":"Secondary / A-Level","qualification":"Physics specialist; QTS/PGCE preferred","budget":"","status":"Open","dateAdded":"2026-07-14","notes":"Start 23 Aug. All candidates confirmed available for 23 Aug start.","createdAt":1784019600000,"id":"seed100","updatedAt":1784019600000},{"school":"DBS Springs (Dubai British School)","group":"Taaleem","role":"English Teacher \u2014 Term 1 supply","contact":"Sheridan Teasel","level":"Secondary","qualification":"English to native speakers preferred (not just EAL/ESL)","budget":"","status":"Filled","dateAdded":"2026-07-21","notes":"Nuha & Tahir preferred; interviews 22 Jul. cc Julia Maltby + Deepika + Reshma.","createdAt":1784624400000,"id":"seed101","updatedAt":1784624400000},{"school":"DBS Springs (Dubai British School)","group":"Taaleem","role":"English/Media Teacher \u2014 Term 1 supply","contact":"Sheridan Teasel","level":"Secondary","qualification":"English teacher; Media/Media Studies experience a plus","budget":"","status":"Open","dateAdded":"2026-07-21","notes":"Same gap can be covered by an English teacher; media experience even better. Krizzane interviewing 24 Jul.","createdAt":1784624400000,"id":"seed102","updatedAt":1784624400000},{"school":"DBS Springs (Dubai British School)","group":"Taaleem","role":"STEAM Teacher \u2014 1\u20132 term supply","contact":"Sheridan Teasel","level":"Secondary","qualification":"STEAM / Design & Technology","budget":"","status":"Open","dateAdded":"2026-07-21","notes":"Tentative ('might potentially'). Tanzeela interviewing 24 Jul.","createdAt":1784624400000,"id":"seed103","updatedAt":1784624400000},{"school":"DBS Springs (Dubai British School)","group":"Taaleem","role":"Maths Teacher \u2014 Term 1","contact":"Deepika Manghnani (HRBP)","level":"Secondary","qualification":"A-Level experience required","budget":"","status":"Open","dateAdded":"2026-07-02","notes":"Wajeeha rejected \u2014 no A-Level experience. Still open; send new profiles.","createdAt":1782982800000,"id":"seed104","updatedAt":1782982800000},{"school":"DBS Jumeirah Park","group":"Taaleem","role":"EYFS Class Teacher","contact":"Lucy Stebbings","level":"EYFS","qualification":"QTS or PGCE; strong EYFS + UK curriculum; fluent English","budget":"","status":"Open","dateAdded":"2026-07-15","notes":"Dinali forwarded to school. Suzanne & Harvinder already known (applied direct). FS role now filled \u2014 this is fresh EYFS need.","createdAt":1784106000000,"id":"seed105","updatedAt":1784106000000},{"school":"GIS (Taaleem)","group":"Taaleem","role":"Secondary Maths (2 positions)","contact":"Nicola Macmillan","level":"Secondary / MYP-CP-DP","qualification":"Teaching qualification required (not subject-only); KHDA approvable","budget":"","status":"On Hold","dateAdded":"2026-07-14","notes":"Permanent, 2 posts. NO Pakistani passport holders (visa rejections). Subject-only quals rejected. Vahida (Indian, B.Ed, approved) submitted.","createdAt":1784019600000,"id":"seed106","updatedAt":1784019600000},{"school":"Ajyal International School MBZ","group":"","role":"FS2 Class Teacher (EYFS)","contact":"Michaela March / Allison","level":"EYFS / FS2","qualification":"QTS/British EYFS; recent British school experience","budget":"","status":"Filled","dateAdded":"2026-06-22","notes":"Tahseen offered FS2. Package being prepared by HR/Principal. Bettinah rejected (wanted more recent British experience).","createdAt":1782118800000,"id":"seed107","updatedAt":1782118800000},{"school":"EIS Jumeirah","group":"Taaleem","role":"Business & Economics Teacher","contact":"Wendy Feherty / Laila Sabet","level":"GCSE & A-Level","qualification":"QTS","budget":"","status":"Closed","dateAdded":"2026-06-26","notes":"Piotr interviewed 1 Jul. SLT went on summer break, no feedback \u2014 not shortlisted.","createdAt":1782464400000,"id":"seed108","updatedAt":1782464400000},{"school":"NIMS Sharjah","group":"NIMS Group","role":"Design Thinking / Skill Development Trainer","contact":"Feroz Mammed","level":"Grade 1\u20138","qualification":"Hands-on skills (carpentry, pottery, coding); activity-based, not theory","budget":"AED 12\u201314k","status":"Open","dateAdded":"2026-06-01","notes":"Wants more skill-based, hands-on profiles; lower salary band. Tanzeela was discussed (salary too high at 18\u201320k). Fayaadh withdrew earlier.","createdAt":1780304400000,"id":"seed109","updatedAt":1780304400000},{"school":"NIMS Sharjah","group":"NIMS Group","role":"Head of Section \u2014 Senior Secondary (CBSE Gr 11/12)","contact":"Feroz Mammed","level":"Grade 11/12 CBSE","qualification":"Proven CBSE board results track record","budget":"","status":"Open","dateAdded":"2026-07-20","notes":"Strong Head of Phase for CBSE board classes; consistent excellent board results.","createdAt":1784538000000,"id":"seed110","updatedAt":1784538000000},{"school":"ABC British Academy","group":"","role":"Deputy Head of Secondary & Primary","contact":"Hazel Govender (Principal)","level":"Senior Leadership","qualification":"Relevant DH experience preferred; senior leader experience suffices","budget":"","status":"Open","dateAdded":"2026-07-01","notes":"","createdAt":1782896400000,"id":"seed111","updatedAt":1782896400000},{"school":"ABC British Academy","group":"","role":"Science Teachers","contact":"Hazel Govender (Principal)","level":"Secondary","qualification":"Strong science","budget":"","status":"Open","dateAdded":"2026-07-01","notes":"","createdAt":1782896400000,"id":"seed112","updatedAt":1782896400000},{"school":"Indian High School (IHS)","group":"IHS","role":"Multiple: SPED, LSA, Music, English, Art, Maths, French","contact":"Soumya Suthan / Dhanya","level":"Various","qualification":"B.Ed mandatory with subject as main; nationality rules per role","budget":"","status":"On Hold","dateAdded":"2026-06-23","notes":"Contract signed. HR interviewing; several rejected on salary/qual. Remaining candidates contacted after summer break. CEO-approved contact sharing.","createdAt":1782205200000,"id":"seed113","updatedAt":1782205200000}],"candidates":[{"name":"Nabil Anis","role":"Physics/Chemistry/Maths","location":"Abu Dhabi","visa":"","status":"Approved","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"15+ yrs; UK Diploma in Education (UEA). Kings' Physics.","id":"seed300","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Noman Shafiq","role":"Science/Physics","location":"Dubai","visa":"","status":"Approved","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"British, QTS (PGCE Huddersfield). 10 yrs GCSE/A-Level/MYP/DP.","id":"seed301","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Mohamed Elbayyar","role":"Physics","location":"UAE","visa":"","status":"Approved","compliance":{"degree":true,"visa":true,"quals":false,"refs":false},"notes":"8 yrs all UAE. Physics/Chem degree + Science Teaching Diploma.","id":"seed302","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Vineeth Kumar","role":"Physics","location":"Dubai","visa":"","status":"In Review","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"Asian Physics Olympiad team leader. Interviewed by Kings'.","id":"seed303","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Krizzane Salinas","role":"English / Media (MIL)","location":"Sharjah","visa":"","status":"In Review","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"MOE-certified, IELTS C1. English + Media & Info Literacy. rTRKS01.","id":"seed304","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Tanzeela Shaikh","role":"Design & Technology / STEAM","location":"Abu Dhabi","visa":"","salary":"AED 18\u201320k","status":"In Review","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"10+ yrs STEAM/robotics/AI. rTRTS01. Salary too high for NIMS.","id":"seed305","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","availability":"","senExp":""},{"name":"Dinali Athukorala","role":"EYFS / FS1","location":"UAE","visa":"Visit Visa","status":"Approved","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"B.Ed(Hons) MOFA-attested & KHDA-approved. rTRDA01. Available immediately.","id":"seed306","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Suzanne Vaidya","role":"EYFS","location":"Dubai","visa":"","status":"Not Suitable","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"B.Ed + PGCert. Known to DBS JP (applied direct). rTRSV01.","id":"seed307","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Harvinder Kaur","role":"EYFS / KS1","location":"Sharjah","visa":"","status":"Not Suitable","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"B.Ed + NPQ Early Years. UAE license 2025. Known to DBS JP. rTRHK01.","id":"seed308","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Vahida Beevi","role":"Secondary Maths","location":"UAE","visa":"","status":"Approved","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"Indian national. B.Ed+M.Phil+M.Sc. KHDA/ADEK/SPEA/MOE TLS3 approved. 19 yrs. rTRVB01.","id":"seed309","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Tahseen Muhammad","role":"EYFS / FS2","location":"Abu Dhabi","visa":"","status":"Placed","compliance":{"degree":true,"visa":true,"quals":true,"refs":true},"notes":"QTS + MEd. Offered FS2 at Ajyal MBZ.","id":"seed310","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Sandra Kadoura","role":"EYFS / FS2","location":"UAE","visa":"","status":"Placed","compliance":{"degree":true,"visa":false,"quals":false,"refs":false},"notes":"PGCEi + MA. Offer at Ajyal. rtSK001. NOTE: verify degree genuineness/attestability.","id":"seed311","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Nuha","role":"English (secondary)","location":"UAE","visa":"","status":"In Review","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"MA English + B.Ed. CELTA. DBS supply. Interview 22 Jul.","id":"seed312","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Tahir","role":"English (secondary)","location":"UAE","visa":"","status":"In Review","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"20+ yrs. MEd+B.Ed+MA English. MOHESR-equivalised. DBS supply. Interview 22 Jul.","id":"seed313","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Frederick","role":"English","location":"UAE","visa":"","status":"In Review","compliance":{"degree":true,"visa":true,"quals":false,"refs":false},"notes":"30+ yrs. MA Adult Ed. DBS supply.","id":"seed314","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Bernadette Rose Sneddon","role":"Primary generalist","location":"Dubai","visa":"","status":"Not Suitable","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"NZ registration. Rejected VISS-KHF (career instability, prior group).","id":"seed315","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""},{"name":"Sashoy Austin","role":"Primary / Maths","location":"Dubai","visa":"Own visa","status":"Not Suitable","compliance":{"degree":true,"visa":true,"quals":true,"refs":false},"notes":"Rejected VISS-KHF (poor interview).","id":"seed316","createdAt":1782896400000,"updatedAt":1782896400000,"contact":"","salary":"","availability":"","senExp":""}],"schools":[{"school":"Kings' Al Barsha","group":"Kings' Education","contact":"Mishal Nur Rahim","email":"m.rahim@kingsalbarsha.com","status":"Signed","notes":"A-Level Physics live. Also Punam Bhara (HR).","createdAt":1784019600000,"id":"seed400","updatedAt":1784019600000,"termsSent":"","termsSigned":""},{"school":"DBS Springs (Dubai British School)","group":"Taaleem","contact":"Sheridan Teasel (Head of Secondary)","email":"steasel@dubaibritishschool.ae","status":"Signed","notes":"Also Julia Maltby, Deepika Manghnani (HRBP), Reshma Cyriac. Multiple Term-1 supply roles.","createdAt":1782982800000,"id":"seed401","updatedAt":1782982800000,"termsSent":"","termsSigned":""},{"school":"DBS Jumeirah Park","group":"Taaleem","contact":"Lucy Stebbings (HR Advisor)","email":"hradvisorjp@dubaibritishschooljp.ae","status":"Signed","notes":"EYFS.","createdAt":1782118800000,"id":"seed402","updatedAt":1782118800000,"termsSent":"","termsSigned":""},{"school":"GIS","group":"Taaleem","contact":"Nicola Macmillan (HR Advisor)","email":"NMacmillan@gischool.ae","status":"Signed","notes":"Secondary Maths x2. No Pakistani passports (visa). Subject-only quals rejected.","createdAt":1784019600000,"id":"seed403","updatedAt":1784019600000,"termsSent":"","termsSigned":""},{"school":"Ajyal International School MBZ","group":"","contact":"Michaela March / Allison","email":"michaela@ajyal.sch.ae","status":"Signed","notes":"EYFS. Tahseen placed. Nursery Supervisor/Trainee Teacher ADEK designations defunct.","createdAt":1782118800000,"id":"seed404","updatedAt":1782118800000,"termsSent":"","termsSigned":""},{"school":"EIS Jumeirah","group":"Taaleem","contact":"Wendy Feherty / Laila Sabet","email":"laila@eischools.ae","status":"Signed","notes":"Business & Economics closed for summer.","createdAt":1782464400000,"id":"seed405","updatedAt":1782464400000,"termsSent":"","termsSigned":""},{"school":"NIMS Sharjah","group":"NIMS Group","contact":"Feroz Mammed","email":"feroz@nimsuae.com","status":"Signed","notes":"Design Thinking (12-14k) + CBSE Head of Senior Secondary. Also Sham Sharaf (HR).","createdAt":1780304400000,"id":"seed406","updatedAt":1780304400000,"termsSent":"","termsSigned":""},{"school":"ABC British Academy","group":"","contact":"Hazel Govender (Principal)","email":"principal@abcprivateschool.ae","status":"Pending","notes":"Deputy Head Sec & Primary + Science teachers.","createdAt":1782896400000,"id":"seed407","updatedAt":1782896400000,"termsSent":"","termsSigned":""},{"school":"Indian High School (IHS)","group":"IHS","contact":"Soumya Suthan / Dhanya Sankaran","email":"soumya.suthan@ihsdubai.org","status":"Signed","notes":"AED 1,500 flat fee. Multi-role. Contact-sharing CEO-approved.","createdAt":1781600400000,"id":"seed408","updatedAt":1781600400000,"termsSent":"","termsSigned":""},{"school":"VISS-KHF (Victoria Intl, Khorfakkan)","group":"","contact":"Steve Walsh (Campus Principal)","email":"walsh.steve@visskhf.ae","status":"Signed","notes":"Grade 5 Primary homeroom (native English, strong classroom mgmt). Also Ryan Harb.","createdAt":1784278800000,"id":"seed409","updatedAt":1784278800000,"termsSent":"","termsSigned":""}],"log":[]};
+let cur = null;
+const overlay = document.getElementById('overlay');
+
+// ---- Supabase (shared cloud storage for Othman + Paul) ----
+const SUPABASE_URL = 'https://qcdsydoirbughuhdswof.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_T4ZJk2B3VwGLmXflwUQj8w_rYEAA7Yh';
+const DB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const STATE_ID = 1; // single-row state table: board_state
+
+// ---- storage + seed ----
+async function loadData(){
+  let loaded=false;
+  try{
+    const { data:row, error } = await DB.from('board_state').select('data').eq('id',STATE_ID).maybeSingle();
+    if(error) throw error;
+    if(row && row.data && ((row.data.vacancies&&row.data.vacancies.length) || (row.data.pipeline&&row.data.pipeline.length))){ DATA=row.data; loaded=true; }
+  }catch(e){ console.error('load error',e); toast('Could not reach database'); }
+  if(!loaded){
+    DATA = JSON.parse(JSON.stringify(SEED_DATA));
+    try{ await DB.from('board_state').upsert({ id:STATE_ID, data:DATA, updated_at:new Date().toISOString() }); }catch(e){ console.error(e); }
+  }
+  ['pipeline','vacancies','candidates','schools','log'].forEach(k=>{ if(!DATA[k]) DATA[k]=[]; });
+  DATA.pipeline.forEach(p=>{ if(!p.activity) p.activity=[];
+    if(p.stage==='Interview') p.stage = (p.interviewDate && p.interviewDate>=new Date().toISOString().slice(0,10))?'Interview Scheduled':'Interviewed';
+    ['outcome','interviewRating','nextAction','nextActionDate'].forEach(f=>{ if(p[f]==null)p[f]=''; });
+    if(p.followUps==null)p.followUps=0; if(p.priority==null)p.priority=false;
+  });
+  DATA.candidates.forEach(c=>{ if(!c.compliance) c.compliance={degree:false,visa:false,quals:false,refs:false}; });
+  renderAll(); startPoll();
+}
+let st=null;
+let lastLocalEdit=0;
+let saving=false;
+async function persist(){
+  saving=true;
+  try{ const { error } = await DB.from('board_state').upsert({ id:STATE_ID, data:DATA, updated_at:new Date().toISOString() }); if(error) throw error; }
+  catch(e){ toast('Save failed — try again'); console.error(e); }
+  saving=false;
+}
+function save(){ lastLocalEdit=Date.now(); clearTimeout(st); st=setTimeout(persist,150); }
+function startPoll(){ setInterval(async()=>{
+    if(overlay.classList.contains('active'))return;          // don't yank data mid-edit
+    if(saving)return;                                        // a write is in flight
+    if(Date.now()-lastLocalEdit < 20000)return;              // leave recent local edits alone
+    try{ const { data:row, error }=await DB.from('board_state').select('data').eq('id',STATE_ID).maybeSingle(); if(!error && row && row.data){ const i=row.data; if(JSON.stringify(i)!==JSON.stringify(DATA)){ DATA=i; ['pipeline','vacancies','candidates','schools','log'].forEach(k=>{if(!DATA[k])DATA[k]=[];}); renderAll(); } } }catch(e){}
+  },8000); }
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function esc(s){ return (s||'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fdate(d){ if(!d)return '—'; const t=new Date(d); if(isNaN(t))return d; return t.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}); }
+function daysSince(ms){ if(!ms)return null; return Math.floor((Date.now()-ms)/86400000); }
+function scls(s){ return 's-'+(s||'').toLowerCase().replace(/[^a-z]/g,''); }
+
+// ---- nav ----
+document.getElementById('nav').onclick=e=>{ const b=e.target.closest('button[data-v]'); if(!b)return;
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active')); document.getElementById('v-'+b.dataset.v).classList.add('active');
+};
+function tick(){ document.getElementById('clock').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' · '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
+tick(); setInterval(tick,30000);
+
+// ---- schemas ----
+const STAGES=['Sourcing','Submitted','Interview Scheduled','Interviewed','Offer','Placed','Rejected','Withdrawn','On Hold'];
+const CLOSED_STAGES=['Placed','Rejected','Withdrawn'];
+const RATINGS=['—','Strong','OK','Weak','No-show'];
+const OUTCOMES=['—','Salary too high','Nationality / visa block','Qualification gap','Chose another candidate','Candidate withdrew','No feedback from school','Placed elsewhere','Other'];
+const VAC_ST=['Open','Filled','On Hold','Closed'];
+const CAND_ST=['Approved','Placed','In Review','Not Suitable'];
+const SCH_ST=['Signed','Pending','Not started'];
+const SCHEMAS={
+  pipeline:{title:'Deal',fields:[
+    {k:'school',l:'School',t:'text',req:1},{k:'group',l:'Group',t:'text'},{k:'role',l:'Role',t:'text',req:1},
+    {k:'candidate',l:'Candidate',t:'text',req:1},{k:'type',l:'Type',t:'select',o:['Permanent','Supply']},
+    {k:'stage',l:'Stage',t:'select',o:STAGES},{k:'interviewDate',l:'Interview date',t:'date'},{k:'startDate',l:'Start date',t:'date'},
+    {k:'interviewRating',l:'Interview rating',t:'select',o:RATINGS},{k:'outcome',l:'Outcome (if closed)',t:'select',o:OUTCOMES},
+    {k:'nextAction',l:'Next action',t:'text'},{k:'nextActionDate',l:'Next action date',t:'date'},
+    {k:'followUps',l:'Follow-ups (count)',t:'number'},{k:'priority',l:'Priority (star)',t:'bool'},
+    {k:'notes',l:'Notes',t:'textarea',full:1},
+  ]},
+  vacancies:{title:'Vacancy',fields:[
+    {k:'school',l:'School',t:'text',req:1},{k:'contact',l:'Contact',t:'text'},{k:'level',l:'Level',t:'text'},
+    {k:'role',l:'Role',t:'text',req:1},{k:'qualification',l:'Qualification',t:'text'},{k:'budget',l:'Budget',t:'text'},
+    {k:'status',l:'Status',t:'select',o:VAC_ST},{k:'dateAdded',l:'Date added',t:'date'},{k:'notes',l:'Notes',t:'textarea',full:1},
+  ]},
+  candidates:{title:'Candidate',fields:[
+    {k:'name',l:'Name',t:'text',req:1},{k:'role',l:'Role',t:'text'},{k:'location',l:'Location',t:'text'},
+    {k:'contact',l:'Contact',t:'text'},{k:'salary',l:'Salary',t:'text'},{k:'visa',l:'Visa',t:'text'},
+    {k:'availability',l:'Availability',t:'text'},{k:'status',l:'Status',t:'select',o:CAND_ST},
+    {k:'notes',l:'Notes',t:'textarea',full:1},
+    {k:'c_degree',l:'Degree verified',t:'chk',ck:'degree'},{k:'c_visa',l:'Visa clear',t:'chk',ck:'visa'},
+    {k:'c_quals',l:'QTS/PGCE/equivalency',t:'chk',ck:'quals'},{k:'c_refs',l:'References',t:'chk',ck:'refs'},
+  ]},
+  schools:{title:'School',fields:[
+    {k:'school',l:'School',t:'text',req:1},{k:'group',l:'Group',t:'text'},{k:'contact',l:'Contact',t:'text'},
+    {k:'email',l:'Email',t:'text'},{k:'termsSent',l:'Terms sent',t:'date'},{k:'termsSigned',l:'Terms signed',t:'date'},
+    {k:'status',l:'Status',t:'select',o:SCH_ST},{k:'notes',l:'Notes',t:'textarea',full:1},
+  ]},
+};
+
+// ---- inline status change ----
+function statusSelect(type,id,val,opts){
+  return `<select class="status ${scls(val)}" onchange="setStatus('${type}','${id}',this.value)">`+
+    opts.map(o=>`<option ${o===val?'selected':''}>${o}</option>`).join('')+`</select>`;
+}
+function setStatus(type,id,val){
+  const rec=DATA[type].find(r=>r.id===id); if(!rec)return;
+  const field = type==='pipeline'?'stage':'status';
+  const prev = rec[field];
+  rec[field]=val; rec.updatedAt=Date.now();
+  // Closing a vacancy? Offer to close the deals attached to it.
+  if(type==='vacancies' && (val==='Filled'||val==='Closed') && prev!==val){
+    const linked = DATA.pipeline.filter(p=>
+      !isClosed(p.stage) &&
+      (p.vacancyId===id || ((p.school||'').trim().toLowerCase()===(rec.school||'').trim().toLowerCase() &&
+                            (p.role||'').trim().toLowerCase()===(rec.role||'').trim().toLowerCase()))
+    );
+    if(linked.length){
+      const names = linked.map(p=>p.candidate).join(', ');
+      if(confirm(`Close the ${linked.length} open deal(s) on this vacancy too?\n\n${names}\n\nThey'll be marked Rejected — "Chose another candidate".`)){
+        linked.forEach(p=>{ p.stage='Rejected'; p.outcome = val==='Filled' ? 'Chose another candidate' : 'Other'; p.updatedAt=Date.now(); });
+        toast(`Vacancy ${val.toLowerCase()} · ${linked.length} deal(s) closed`);
+      } else { toast('Updated'); }
+    } else { toast('Updated'); }
+  } else { toast('Updated'); }
+  save(); renderAll();
+}
+function goTo(type,id){
+  const btn=document.querySelector(`#nav button[data-v="${type}"]`); if(!btn)return;
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active')); btn.classList.add('active');
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('v-'+type).classList.add('active');
+  // clear any filter that might hide the row
+  const q=document.getElementById('q-'+type), f=document.getElementById('f-'+type);
+  if(q&&q.value){ q.value=''; }
+  if(f&&f.value){ f.value=''; }
+  window['render_'+type]();
+  setTimeout(()=>{
+    const row=document.querySelector(`#t-${type} tr[data-id="${id}"]`);
+    if(row){ row.scrollIntoView({behavior:'smooth',block:'center'}); row.classList.add('flash'); setTimeout(()=>row.classList.remove('flash'),2200); }
+  },60);
+}
+function setField(type,id,field,val){
+  const rec=DATA[type].find(r=>r.id===id); if(!rec)return;
+  rec[field]=val; rec.updatedAt=Date.now();
+  save(); renderAll();
+}
+function togglePriority(id){ const p=DATA.pipeline.find(r=>r.id===id); if(!p)return; p.priority=!p.priority; save(); renderAll(); }
+function bumpFollowup(id){ const p=DATA.pipeline.find(r=>r.id===id); if(!p)return; p.followUps=(p.followUps||0)+1; p.updatedAt=Date.now(); save(); renderAll(); toast('Follow-up logged'); }
+function isClosed(stage){ return CLOSED_STAGES.includes(stage); }
+function smallSelect(type,id,field,val,opts){
+  return `<select class="mini" onchange="setField('${type}','${id}','${field}',this.value==='—'?'':this.value)">`+
+    opts.map(o=>`<option ${((val||'—')===o)?'selected':''}>${o}</option>`).join('')+`</select>`;
+}
+
+// ---- renderers ----
+function render_pipeline(){
+  const q=(document.getElementById('q-pipeline').value||'').toLowerCase();
+  const f=document.getElementById('f-pipeline').value;
+  let rows=DATA.pipeline.filter(p=>{ const m=!q||[p.school,p.candidate,p.role,p.nextAction].some(x=>(x||'').toLowerCase().includes(q)); return m&&(!f||p.stage===f); });
+  // priority first, then most recently updated
+  rows.sort((a,b)=>{ if(!!b.priority-!!a.priority) return (!!b.priority)-(!!a.priority); return (b.updatedAt||0)-(a.updatedAt||0); });
+  document.getElementById('c-pipeline').textContent=rows.length+' deals';
+  const el=document.getElementById('t-pipeline');
+  if(!rows.length){ el.innerHTML='<div class="empty">No deals.</div>'; return; }
+  const today=new Date().toISOString().slice(0,10);
+  el.innerHTML=`<table><thead><tr>
+    <th></th><th>School</th><th>Candidate</th><th>Role</th><th>Type</th><th>Stage</th><th>Interview</th><th>Rating</th><th>Outcome</th><th>Next action</th><th>Follow-ups</th><th>Start</th><th>Last activity</th><th>Age</th><th></th>
+  </tr></thead><tbody>${rows.map(p=>{
+    const last=(p.activity&&p.activity.length)?p.activity[p.activity.length-1]:null;
+    const d=daysSince(p.updatedAt||p.createdAt);
+    const closed=isClosed(p.stage);
+    const naOverdue=p.nextActionDate&&p.nextActionDate<today&&!closed;
+    const fu=p.followUps||0;
+    return `<tr data-id="${p.id}">
+      <td><span class="star ${p.priority?'on':''}" onclick="togglePriority('${p.id}')" title="Priority">${p.priority?'★':'☆'}</span></td>
+      <td class="strong">${esc(p.school)}<div class="muted">${esc(p.group||'')}</div></td>
+      <td>${esc(p.candidate)}</td>
+      <td>${esc(p.role)}</td>
+      <td>${esc(p.type||'—')}</td>
+      <td>${statusSelect('pipeline',p.id,p.stage,STAGES)}</td>
+      <td class="mono">${fdate(p.interviewDate)}</td>
+      <td>${smallSelect('pipeline',p.id,'interviewRating',p.interviewRating,RATINGS)}</td>
+      <td>${closed?smallSelect('pipeline',p.id,'outcome',p.outcome,OUTCOMES):'<span class="muted">—</span>'}</td>
+      <td class="wrapcell" style="min-width:170px;max-width:240px;">${p.nextAction?('<span class="'+(naOverdue?'na-over':'')+'">'+esc(p.nextAction)+'</span>'+(p.nextActionDate?' <b class="mono" style="font-size:10px;color:'+(naOverdue?'var(--danger)':'var(--inkfaint)')+'">'+fdate(p.nextActionDate)+'</b>':'')):'<span class="muted">—</span>'}</td>
+      <td><span class="fu ${fu>=3&&!closed?'hot':''}">${fu}</span> <button class="fu-btn" onclick="bumpFollowup('${p.id}')" title="Log a follow-up">+1</button></td>
+      <td class="mono">${fdate(p.startDate)}</td>
+      <td class="wrapcell">${last?('<b class="mono" style="color:var(--accent)">'+fdate(last.date)+'</b> '+esc(last.text)):'—'}</td>
+      <td><span class="days ${d>=5&&!closed&&p.stage!=='On Hold'?'hot':''}">${d!=null?d+'d':'—'}</span></td>
+      <td><button class="icon-btn" onclick="openModal('pipeline','${p.id}')">Edit</button></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function render_vacancies(){
+  const q=(document.getElementById('q-vacancies').value||'').toLowerCase();
+  const f=document.getElementById('f-vacancies').value;
+  let rows=DATA.vacancies.filter(v=>{ const m=!q||[v.school,v.role,v.contact].some(x=>(x||'').toLowerCase().includes(q)); return m&&(!f||v.status===f); });
+  document.getElementById('c-vacancies').textContent=rows.length+' roles';
+  const el=document.getElementById('t-vacancies');
+  if(!rows.length){ el.innerHTML='<div class="empty">No vacancies.</div>'; return; }
+  el.innerHTML=`<table><thead><tr>
+    <th>School</th><th>Role</th><th>Level</th><th>Contact</th><th>Qualification</th><th>Budget</th><th>Status</th><th>Days open</th><th>Notes</th><th></th>
+  </tr></thead><tbody>${rows.map(v=>{
+    const d=daysSince(v.updatedAt||v.createdAt);
+    return `<tr data-id="${v.id}">
+      <td class="strong">${esc(v.school)}<div class="muted">${esc(v.group||'')}</div></td>
+      <td>${esc(v.role)}</td><td>${esc(v.level||'—')}</td><td>${esc(v.contact||'—')}</td>
+      <td class="wrapcell">${esc(v.qualification||'—')}</td>
+      <td class="mono">${esc(v.budget||'—')}</td>
+      <td>${statusSelect('vacancies',v.id,v.status,VAC_ST)}</td>
+      <td><span class="days ${d>=7&&v.status==='Open'?'hot':''}">${d!=null?d+'d':'—'}</span></td>
+      <td class="wrapcell">${esc(v.notes||'')}</td>
+      <td><button class="icon-btn" onclick="openModal('vacancies','${v.id}')">Edit</button></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function render_candidates(){
+  const q=(document.getElementById('q-candidates').value||'').toLowerCase();
+  const f=document.getElementById('f-candidates').value;
+  let rows=DATA.candidates.filter(c=>{ const m=!q||[c.name,c.role,c.visa,c.notes].some(x=>(x||'').toLowerCase().includes(q)); return m&&(!f||c.status===f); });
+  document.getElementById('c-candidates').textContent=rows.length+' candidates';
+  const el=document.getElementById('t-candidates');
+  if(!rows.length){ el.innerHTML='<div class="empty">No candidates.</div>'; return; }
+  el.innerHTML=`<table><thead><tr>
+    <th>Name</th><th>Role</th><th>Location</th><th>Visa</th><th>Salary</th><th>Compliance</th><th>Status</th><th>Notes</th><th></th>
+  </tr></thead><tbody>${rows.map(c=>{
+    const cm=c.compliance||{}; const L={degree:'Deg',visa:'Visa',quals:'Qual',refs:'Ref'};
+    const pips=Object.keys(L).map(k=>`<span class="pip ${cm[k]?'on':'off'}">${L[k]}</span>`).join('');
+    return `<tr data-id="${c.id}">
+      <td class="strong">${esc(c.name)}</td><td>${esc(c.role||'—')}</td><td>${esc(c.location||'—')}</td>
+      <td>${esc(c.visa||'—')}</td><td class="mono">${esc(c.salary||'—')}</td>
+      <td><div class="pips">${pips}</div></td>
+      <td>${statusSelect('candidates',c.id,c.status,CAND_ST)}</td>
+      <td class="wrapcell">${esc(c.notes||'')}</td>
+      <td><button class="icon-btn" onclick="openModal('candidates','${c.id}')">Edit</button></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function render_schools(){
+  const q=(document.getElementById('q-schools').value||'').toLowerCase();
+  let rows=DATA.schools.filter(s=>!q||[s.school,s.contact,s.notes].some(x=>(x||'').toLowerCase().includes(q)));
+  document.getElementById('c-schools').textContent=rows.length+' schools';
+  const el=document.getElementById('t-schools');
+  if(!rows.length){ el.innerHTML='<div class="empty">No schools.</div>'; return; }
+  el.innerHTML=`<table><thead><tr>
+    <th>School</th><th>Group</th><th>Contact</th><th>Email</th><th>Terms sent</th><th>Terms signed</th><th>Status</th><th>Notes</th><th></th>
+  </tr></thead><tbody>${rows.map(s=>`<tr data-id="${s.id}">
+    <td class="strong">${esc(s.school)}</td><td>${esc(s.group||'—')}</td><td>${esc(s.contact||'—')}</td>
+    <td class="mono" style="font-size:11px;">${esc(s.email||'—')}</td>
+    <td class="mono">${fdate(s.termsSent)}</td><td class="mono">${fdate(s.termsSigned)}</td>
+    <td>${statusSelect('schools',s.id,s.status,SCH_ST)}</td>
+    <td class="wrapcell">${esc(s.notes||'')}</td>
+    <td><button class="icon-btn" onclick="openModal('schools','${s.id}')">Edit</button></td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+function render_log(){
+  const el=document.getElementById('t-log');
+  if(!DATA.log.length){ el.innerHTML='<div class="empty">No log entries yet.</div>'; return; }
+  const rows=[...DATA.log].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  el.innerHTML=`<table><thead><tr><th>Date</th><th>Done</th><th>Pending</th></tr></thead><tbody>${rows.map(l=>`<tr>
+    <td class="mono" style="color:var(--accent);font-weight:700;">${fdate(l.date)}</td>
+    <td class="wrapcell" style="max-width:500px;">${esc(l.done)}</td>
+    <td class="wrapcell" style="max-width:360px;color:var(--inksoft);">${esc(l.pending||'')}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+document.getElementById('log-date').valueAsDate=new Date();
+function saveLog(){ const d=document.getElementById('log-date').value, done=document.getElementById('log-done').value.trim(), pen=document.getElementById('log-pending').value.trim();
+  if(!d||!done){ toast('Add date + what you did'); return; }
+  DATA.log.unshift({id:uid(),date:d,done,pending:pen}); document.getElementById('log-done').value=''; document.getElementById('log-pending').value='';
+  save(); render_log(); toast('Saved'); }
+
+// ---- DASHBOARD ----
+function renderDash(){
+  const openV=DATA.vacancies.filter(v=>v.status==='Open');
+  const active=DATA.pipeline.filter(p=>!CLOSED_STAGES.includes(p.stage)&&p.stage!=='On Hold');
+  const placed=DATA.pipeline.filter(p=>p.stage==='Placed').length;
+  const interviews=DATA.pipeline.filter(p=>p.stage==='Interview Scheduled'||p.stage==='Interviewed').length;
+  const ready=DATA.candidates.filter(c=>c.status==='Approved'||c.status==='Placed').length;
+  const signed=DATA.schools.filter(s=>s.status==='Signed').length;
+  const kpi=[['warn',openV.length,'Open vacancies'],['',active.length,'Active pipeline'],['accent',interviews,'At interview'],['success',placed,'Placed'],['purple',ready,'Candidates ready'],['',signed,'Schools signed']];
+  document.getElementById('kpis').innerHTML=kpi.map(k=>`<div class="kpi ${k[0]}"><div class="n">${k[1]}</div><div class="l">${k[2]}</div></div>`).join('');
+
+  // attention
+  const items=[]; const now=Date.now(); const today=new Date().toISOString().slice(0,10);
+  const A=(tag,title,sub,type,id)=>items.push({tag,title,sub,type,id});
+  DATA.pipeline.forEach(p=>{ if(!p.interviewDate)return; const dt=new Date(p.interviewDate); if(isNaN(dt))return; const a=Math.ceil((dt-now)/86400000); if(a>=0&&a<=3)A('Interview soon',`${p.candidate} — ${p.school}`,a===0?'Today':`in ${a}d`,'pipeline',p.id); });
+  DATA.pipeline.filter(p=>p.stage==='Interviewed').forEach(p=>{ const d=daysSince(p.updatedAt||p.createdAt); A('Awaiting feedback',`${p.candidate} — ${p.school}`, d>=1?`interviewed ${d}d ago`:'chase the school','pipeline',p.id); });
+  DATA.pipeline.filter(p=>p.stage==='Offer').forEach(p=>{ A('Offer out',`${p.candidate} — ${p.school}`,'confirm acceptance / package','pipeline',p.id); });
+  DATA.pipeline.forEach(p=>{ if(p.nextActionDate&&p.nextActionDate<today&&!isClosed(p.stage))A('Action overdue',`${p.candidate} — ${p.school}`,p.nextAction||'next step due','pipeline',p.id); });
+  DATA.pipeline.forEach(p=>{ if((p.followUps||0)>=3&&!isClosed(p.stage))A('Stalling',`${p.candidate} — ${p.school}`,`${p.followUps} follow-ups, no reply`,'pipeline',p.id); });
+  openV.forEach(v=>{ const d=daysSince(v.updatedAt||v.createdAt); if(d>=7)A('Stale vacancy',`${v.school} — ${v.role}`,`${d}d no update`,'vacancies',v.id); });
+  active.forEach(p=>{ if(p.stage==='Interviewed')return; const d=daysSince(p.updatedAt||p.createdAt); if(d>=5)A('Stuck deal',`${p.candidate} → ${p.school}`,`${p.stage} ${d}d`,'pipeline',p.id); });
+  document.getElementById('attnCount').textContent = items.length ? '('+items.length+')' : '';
+  document.getElementById('attn').innerHTML = items.length?`<div class="attn-grid">${items.slice(0,12).map(i=>`<div class="attn-item clickable" onclick="goTo('${i.type}','${i.id}')"><div class="t">${esc(i.tag)}</div><div class="n">${esc(i.title)}</div><div class="s">${esc(i.sub)}</div></div>`).join('')}</div>`:`<div class="attn-empty">Nothing urgent — all moving on schedule.</div>`;
+
+  // charts
+  const stageColors={Sourcing:'#D97A1F',Submitted:'#E0A020','Interview Scheduled':'#2E6CF6',Interviewed:'#7A5AF8',Offer:'#12A9B4',Placed:'#0EA972',Rejected:'#97A3B8',Withdrawn:'#B0BAC9','On Hold':'#C4B5FD'};
+  barChart('chartStage', STAGES.map(s=>({label:s,value:DATA.pipeline.filter(p=>p.stage===s).length,color:stageColors[s]})));
+  const vacColors={Open:'#D97A1F',Filled:'#0EA972','On Hold':'#2E6CF6',Closed:'#97A3B8'};
+  donutChart('chartVac', VAC_ST.map(s=>({label:s,value:DATA.vacancies.filter(v=>v.status===s).length,color:vacColors[s]})));
+  const bySchool={}; DATA.pipeline.forEach(p=>{ bySchool[p.school]=(bySchool[p.school]||0)+1; });
+  const sk=Object.entries(bySchool).sort((a,b)=>b[1]-a[1]).slice(0,8).map(e=>({label:e[0],value:e[1],color:'#2E6CF6'}));
+  hbarChart('chartSchool', sk);
+  lineChart('chartTime', weeklySeries());
+}
+
+function weeklySeries(){
+  // count pipeline deals created per ISO week for last 8 weeks
+  const now=new Date(); const weeks=[];
+  for(let i=7;i>=0;i--){ const d=new Date(now); d.setDate(now.getDate()-i*7); weeks.push(d); }
+  return weeks.map(w=>{ const start=new Date(w); start.setHours(0,0,0,0); start.setDate(start.getDate()-((start.getDay()+6)%7)); const end=new Date(start); end.setDate(start.getDate()+7);
+    const n=DATA.pipeline.filter(p=>{ const c=p.createdAt?new Date(p.createdAt):null; return c&&c>=start&&c<end; }).length;
+    return {label:(start.getMonth()+1)+'/'+start.getDate(), value:n}; });
+}
+
+// ---- SVG chart helpers ----
+function barChart(id,data){
+  const W=560,H=230,pad=30,bw=Math.min(44,(W-pad*2)/data.length-8);
+  const max=Math.max(1,...data.map(d=>d.value));
+  const gap=(W-pad*2)/data.length;
+  let bars='',labels='',vals='';
+  data.forEach((d,i)=>{ const x=pad+i*gap+gap/2-bw/2; const h=(d.value/max)*(H-pad*2); const y=H-pad-h;
+    bars+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4" fill="${d.color}"/>`;
+    vals+=`<text x="${x+bw/2}" y="${y-5}" text-anchor="middle" font-size="12" font-weight="700" fill="#0E1F3D" font-family="IBM Plex Mono">${d.value}</text>`;
+    const short=d.label.length>11?d.label.replace('Interview ','Int. ').replace(' ','\u00A0'):d.label;
+    labels+=`<text x="${x+bw/2}" y="${H-pad+14}" text-anchor="end" font-size="9" fill="#5C6B85" font-family="Inter" transform="rotate(-35 ${x+bw/2} ${H-pad+14})">${short}</text>`;
+  });
+  document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}"><line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#E3E8F0"/>${bars}${vals}${labels}</svg>`;
+}
+function hbarChart(id,data){
+  if(!data.length){ document.getElementById(id).innerHTML='<div class="empty">No data</div>'; return; }
+  const W=460,rowH=26,pad=8,labelW=150,H=data.length*rowH+pad*2;
+  const max=Math.max(1,...data.map(d=>d.value));
+  let out='';
+  data.forEach((d,i)=>{ const y=pad+i*rowH; const bw=(d.value/max)*(W-labelW-40);
+    out+=`<text x="${labelW-8}" y="${y+rowH/2+4}" text-anchor="end" font-size="11" fill="#0E1F3D" font-family="Inter" font-weight="600">${d.label.length>20?d.label.slice(0,19)+'…':d.label}</text>`;
+    out+=`<rect x="${labelW}" y="${y+4}" width="${Math.max(2,bw)}" height="${rowH-10}" rx="3" fill="${d.color}"/>`;
+    out+=`<text x="${labelW+Math.max(2,bw)+6}" y="${y+rowH/2+4}" font-size="11" font-weight="700" fill="#0E1F3D" font-family="IBM Plex Mono">${d.value}</text>`;
+  });
+  document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}">${out}</svg>`;
+}
+function donutChart(id,data){
+  const total=data.reduce((s,d)=>s+d.value,0);
+  const W=460,H=220,cx=130,cy=110,r=72,rin=44;
+  let out='',ang=-Math.PI/2;
+  if(total===0){ out=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#EEF1F6"/><circle cx="${cx}" cy="${cy}" r="${rin}" fill="#fff"/>`; }
+  else data.forEach(d=>{ if(!d.value)return; const a=d.value/total*Math.PI*2; const x1=cx+r*Math.cos(ang),y1=cy+r*Math.sin(ang); const x2=cx+r*Math.cos(ang+a),y2=cy+r*Math.sin(ang+a); const large=a>Math.PI?1:0;
+    out+=`<path d="M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${cx},${cy} Z" fill="${d.color}"/>`; ang+=a; });
+  out+=`<circle cx="${cx}" cy="${cy}" r="${rin}" fill="#fff"/>`;
+  out+=`<text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="26" font-weight="800" fill="#0E1F3D" font-family="Inter">${total}</text>`;
+  out+=`<text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="10" fill="#5C6B85" font-family="IBM Plex Mono">TOTAL</text>`;
+  // legend right
+  let ly=48; data.forEach(d=>{ out+=`<rect x="270" y="${ly}" width="10" height="10" rx="2" fill="${d.color}"/><text x="286" y="${ly+9}" font-size="11.5" fill="#0E1F3D" font-family="Inter">${d.label}</text><text x="440" y="${ly+9}" text-anchor="end" font-size="11.5" font-weight="700" fill="#0E1F3D" font-family="IBM Plex Mono">${d.value}</text>`; ly+=26; });
+  document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}">${out}</svg>`;
+}
+function lineChart(id,data){
+  const W=460,H=220,pad=34;
+  const max=Math.max(1,...data.map(d=>d.value));
+  const gap=(W-pad*2)/(data.length-1||1);
+  let pts=data.map((d,i)=>[pad+i*gap, H-pad-(d.value/max)*(H-pad*2)]);
+  const path=pts.map((p,i)=>(i?'L':'M')+p[0]+','+p[1]).join(' ');
+  const area=path+` L${pts[pts.length-1][0]},${H-pad} L${pts[0][0]},${H-pad} Z`;
+  let dots='',labels='',vals='';
+  pts.forEach((p,i)=>{ dots+=`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="#2E6CF6"/>`;
+    if(data[i].value)vals+=`<text x="${p[0]}" y="${p[1]-8}" text-anchor="middle" font-size="10" font-weight="700" fill="#2E6CF6" font-family="IBM Plex Mono">${data[i].value}</text>`;
+    labels+=`<text x="${p[0]}" y="${H-pad+15}" text-anchor="middle" font-size="9" fill="#5C6B85" font-family="IBM Plex Mono">${data[i].label}</text>`; });
+  document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}"><line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#E3E8F0"/><path d="${area}" fill="#2E6CF6" opacity="0.08"/><path d="${path}" fill="none" stroke="#2E6CF6" stroke-width="2.5"/>${dots}${vals}${labels}</svg>`;
+}
+
+// ---- modal ----
+function openModal(type,id){
+  cur={type,id};
+  const sc=SCHEMAS[type]; const rec=id?DATA[type].find(r=>r.id===id):{};
+  document.getElementById('m-title').textContent=(id?'Edit ':'New ')+sc.title;
+  const b=document.getElementById('m-body'); b.innerHTML='';
+  sc.fields.forEach(f=>{ const w=document.createElement('div'); w.className='fld'+(f.full?' full':'')+(f.t==='chk'?' chk':'');
+    if(f.t==='chk'){ const i=document.createElement('input'); i.type='checkbox'; i.checked=rec.compliance?!!rec.compliance[f.ck]:false; i.dataset.ck=f.ck; const l=document.createElement('label'); l.textContent=f.l; w.appendChild(i); w.appendChild(l); b.appendChild(w); return; }
+    if(f.t==='bool'){ w.className='fld chk'; const i=document.createElement('input'); i.type='checkbox'; i.checked=!!rec[f.k]; i.dataset.k=f.k; i.dataset.bool='1'; const l=document.createElement('label'); l.textContent=f.l; w.appendChild(i); w.appendChild(l); b.appendChild(w); return; }
+    const l=document.createElement('label'); l.textContent=f.l; w.appendChild(l);
+    let inp;
+    if(f.t==='select'){ inp=document.createElement('select'); f.o.forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;inp.appendChild(op);}); inp.value=rec[f.k]||f.o[0]; }
+    else if(f.t==='textarea'){ inp=document.createElement('textarea'); inp.value=rec[f.k]||''; }
+    else { inp=document.createElement('input'); inp.type=f.t; inp.value=rec[f.k]||''; }
+    inp.dataset.k=f.k; w.appendChild(inp); b.appendChild(w);
+  });
+  document.getElementById('m-del').style.display=id?'inline-flex':'none';
+  overlay.classList.add('active');
+}
+function closeModal(){ overlay.classList.remove('active'); cur=null; }
+overlay.onclick=e=>{ if(e.target===overlay)closeModal(); };
+document.getElementById('m-save').onclick=()=>{ if(!cur)return; const {type,id}=cur; const sc=SCHEMAS[type];
+  const rec=id?DATA[type].find(r=>r.id===id):{id:uid(),createdAt:Date.now(),activity:type==='pipeline'?[]:undefined};
+  let miss=false;
+  sc.fields.forEach(f=>{ if(f.t==='chk'){ const i=document.querySelector(`#m-body [data-ck="${f.ck}"]`); if(!rec.compliance)rec.compliance={}; rec.compliance[f.ck]=i?i.checked:false; return; }
+    if(f.t==='bool'){ const i=document.querySelector(`#m-body [data-k="${f.k}"][data-bool]`); rec[f.k]=i?i.checked:false; return; }
+    const i=document.querySelector(`#m-body [data-k="${f.k}"]`); if(!i)return;
+    if(f.t==='number'){ rec[f.k]=parseInt(i.value)||0; return; }
+    rec[f.k]=i.value; if(f.req&&!i.value.trim())miss=true; });
+  if(miss){ toast('Fill required fields'); return; }
+  rec.updatedAt=Date.now(); if(!id)DATA[type].push(rec);
+  save(); renderAll(); closeModal(); toast('Saved');
+};
+document.getElementById('m-del').onclick=()=>{ if(!cur||!cur.id)return; DATA[cur.type]=DATA[cur.type].filter(r=>r.id!==cur.id); save(); renderAll(); closeModal(); toast('Deleted'); };
+
+// ---- csv ----
+function exportCSV(type){ const sc=SCHEMAS[type]; const rows=DATA[type]; if(!rows.length){toast('Nothing to export');return;}
+  const keys=sc.fields.filter(f=>f.t!=='chk').map(f=>f.k);
+  const csv=[keys.join(',')].concat(rows.map(r=>keys.map(k=>`"${(r[k]!=null?String(r[k]):'').replace(/"/g,'""')}"`).join(','))).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=`rtriibe-${type}-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(u); toast('CSV downloaded');
+}
+
+// ---- wire search ----
+['pipeline','vacancies','candidates','schools'].forEach(t=>{ const q=document.getElementById('q-'+t), f=document.getElementById('f-'+t);
+  if(q)q.addEventListener('input',()=>window['render_'+t]()); if(f)f.addEventListener('change',()=>window['render_'+t]()); });
+
+function renderAll(){ renderDash(); render_pipeline(); render_vacancies(); render_candidates(); render_schools(); render_log(); }
+loadData();
+</script>
+</body>
+</html>
